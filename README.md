@@ -5,7 +5,7 @@ Product design is a multidisciplinary role that incorporates artistic vision, fu
 
 In their 2016 paper <a href='https://arxiv.org/abs/1611.07004'>“Image-to-Image Translation with Conditional Adversarial Networks,”</a> commonly known as the "pix2pix" paper, Philip Isola et al. present a methodology and architecture for generating a full-fledged photorealistic image based on some substrata or idealization of that image (e.g. a B&W image, map, or outline) using Conditional Generative Adversarial Networks (cGANs).  Where GANs typically take random noise as an input, cGANs take some seed image that is paired to a target image: in the designer's case, these could be a quick sketch and a full-fledged photograph.
 
-In this project, I use the architecture Isola et al created to develop a tool for designers that I am calling sketch2pic.  Implemented in keras and tensor flow, this tool takes a basic hand-drawn sketch of a product design and produces photo-like renderings of how that product might look once fully realized.
+In this project, I use the architecture that Isola et al created to develop a tool for designers that I am calling sketch2pic.  Implemented in keras and tensor flow, this tool takes a basic hand-drawn sketch of a product design and produces photo-like renderings of how that product might look once fully realized.
 
 While this tool is still fairly low-resolution due largely to dataset and compute constrictions, a moderately upscaled version could enhance the speed and specificity with which designers can brainstorm ideas – and it also has the potential to communicate their ideas quickly and compellingly to supervisors, colleagues, and clients.
 
