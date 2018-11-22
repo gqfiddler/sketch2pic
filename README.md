@@ -1,0 +1,18 @@
+# Sketch2pic
+
+## Overview
+Product design is a multidisciplinary role that incorporates artistic vision, functional awareness, psychological insight, and market analysis.  For physical product design (e.g. shoes, apparel, or cars), the ability to envision a product in high detail and analyze its appeal is a crucial skill.  Once a compelling vision has been developed, a designer must also find a way, through words or painstaking artistic renderings, to communicate this vision to others in the company.
+
+In their 2016 paper “Image-to-Image Translation with Conditional Adversarial Networks,” Philip Isola et al. present a methodology and architecture for generating a full-fledged photorealistic image based on some substrata or idealization of that image (e.g. a B&W image, map, or outline) using Conditional Generative Adversarial Networks (cGANs).  In this project, I will use the architecture they created to develop a tool for designers that I am calling Sketch2pic.  This tool takes a basic hand-drawn sketch of their product design and produces several photorealistic renderings of how that product might look once fully realized.  Such a tool could enhance the speed and specificity with which designers can brainstorm ideas – and it also has the potential to communicate their ideas quickly and compellingly to colleagues and supervisors.
+
+## Sources
+My primary source for this project will be the paper cited above.  In addition, I’ll be looking at the researchers’ Pytorch implementation on GitHub.  Since I’ll be using Tensorflow + Keras, I’ll also look at some Keras implementations of the “pix2pix” model (as it’s also called) by other machine learning practitioners.  The original U-net architecture paper, from which Phillipi et al derived their generator architecture, may also prove useful.
+
+My data from this project will be UT’s Zappos dataset, which consists of 50,000 images of shoes.  This dataset was used as one of the example datasets in the original paper.
+
+The techniques from the course that I’ll be using primarily comprise the “Neural Networks and Deep Learning” section in Unit 4 and the Unit 6 deep learning specialization.  However, I’ll also be drawing on training and validation best practices discussed throughout the supervised learning section.
+
+## Potential Difficulties and Payoffs
+I’m aware that the model I’m using is significantly more complicated than those discussed in the Thinkful deep learning specialization.  This will definitely present some challenges in structuring, debugging, and running the code (I have a GPU account set up at Floydhub, to yield the necessary computing power for the latter).  It will be a good learning experience, but not easy.  However, I’ve done quite a bit of research and read through several implementations, and my mentor and I have discussed the project and agree that it’s feasible for me – and will help me practice many important principles and techniques.  It’s particularly helpful that, while I intend to write all of my code from scratch, there are numerous implementations on GitHub that I can look to for concrete guidance.
+
+I should also mention this won’t be sheerly a reimplementation of an existing model architecture: I do have a few functionalities that I hope to add or improve on.  In particular, as the design-focused usage case allows for multiple differing generated images to be equally useful (as opposed to photo restoration, where there is only one correct image), I hope to slightly modify the model to produce multiple images that differ significantly from each other.  This would allow me to explore a bit and produce some tweaks of my own that, while not necessarily wholly new, would at least show a potential employer some creative problem-solving.
