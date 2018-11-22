@@ -16,6 +16,14 @@ This project includes several differences from the original implementation of th
 # Dataset
 For the purposes of this demonstration, I've used the readily available <a href='http://vision.cs.utexas.edu/projects/finegrained/utzap50k/'>Zappos 50K dataset</a> from the University of Texas, which consists of 50,000 images of shoes.  This dataset was used as one of the example datasets in the original paper.  However, it's important to note that, since this tool includes dataprocessing, the model can be used on any dataset of images of a product type against a blank background.
 
+# Files
+- The main presentation file here, for an overview and explanation of the project, is the Final Capstone - Sketch2pic notebook
+- the image loading and processing functions are in data_loading.py
+- the main model is in cGAN_functions.py
+- you can upload pre-trained weights to that model from full_cGAN_weights.h5 and full_disc_weights.h5
+- a version of the model with more traditional pix2pix training (without using the set_weight() gradient trick described in the notebook) is in cGAN_functions_original.py
+- a multi-output version that generates multiple images for each sketch is at cGAN_multi_out.py; however, it still has a few bugs to be worked out.
+
 
 # Use and exploration
 While this example is fairly specific, pix2pix-based models are broadly generalizable to image-to-image tasks.  This could be used for lots of different purposes, and there are many tweaks and alternate versions still to be explored.  Feel free to download this version and play around with it - and let me know if you make any interesting discoveries!
