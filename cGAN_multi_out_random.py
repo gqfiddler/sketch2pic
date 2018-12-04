@@ -9,6 +9,8 @@ import tensorflow as tf
 from tensorflow.keras import layers, regularizers, losses
 from tensorflow.keras.models import Model, Sequential
 import tensorflow.keras.backend as K
+from skimage.transform import resize
+
 
 class sketch2pic():
 
@@ -18,6 +20,7 @@ class sketch2pic():
         self.lambda_ = lambda_
         self.gen_activation = generator_activation
         self.previous_best = list(np.zeros(100))
+        self.dropout_img_idx = 0
 
         class History():
             def __init__(self, model_name):
@@ -64,9 +67,15 @@ class sketch2pic():
                         for sketch in self.dev_sketches[:n_columns]],
                     axis=1)
                 originals_row = np.concatenate(self.dev_images[:n_columns], axis=1)
+                black_bar = np.zeros((6, 128*n_columns, 3))
                 first_row = np.concatenate([self.dev_fakes_first_epoch[i] for i in range(n_columns)], axis=1)
-                training_rows = [np.concatenate(pics_list[:n_columns], axis=1) for pics_list in self.dev_fakes[1:]]
-                display_rows = [sketches_row] + [first_row] + training_rows + [originals_row]
+                # training rows are just like first_row, but add a black bar after each for separation
+                training_rows = [np.concatenate(
+                                    [np.concatenate(pics_list[:n_columns], axis=1), black_bar],
+                                    axis=0)
+                                for pics_list in self.dev_fakes[1:]]
+                display_rows = [sketches_row] + [black_bar] + [first_row] + [black_bar] \
+                                + training_rows + [originals_row]
                 full_grid = np.concatenate(display_rows, axis=0)
                 if save:
                     sp.misc.imsave(file_identifier + '_plot_examples.jpg', full_grid)
@@ -268,26 +277,37 @@ class sketch2pic():
             ''' like cGAN loss log term, but negative because the discrim. aims to maximize'''
             return -1 * tf.log(1 - y_pred + 1e-10) # slight bias for numerical stability
 
-        def cGAN_loss_photo(real_photo_fives, fake_photos):
-            return tf.reduce_mean(losses.mean_absolute_error(real_photo_fives, fake_photos)) \
+        def cGAN_loss_photo_uniform(real_photo_quartets, fake_photos):
+            return tf.reduce_mean(losses.mean_absolute_error(real_photo_quartets, fake_photos)) \
                     * self.lambda_
 
-        def cGAN_prediction_loss(y_true, all_predictions):
-            # previous_best logs the (0-->4) indices of the previous top-scoring fakes
+        def cGAN_loss_photo(real_photo_quartets, fake_photos):
+            real_photos = real_photo_quartets[:,:,:,0:3]
 
-            # prohibit model from choosing either of the past two top-scorers
-            real_pred = all_predictions[5]
-            eligible_preds = tf.concat([all_predictions[i] for i in range(5)
-                                        if i not in self.previous_best[-2:]],
-                                        -1)
-            max_eligible_fake_pred = tf.reduce_max(eligible_preds)
-            max_pred_index = tf.argmax(all_predictions[:5])
+            # split into individual fake images (still #batch_size dim 0)
+            eligible_fakes = [fake_photos[:,:,:,i:i+3] for i in range(0,12,3)
+                                        if i != self.dropout_img_idx]
 
-            # update log of indices of previous best fakes
-            del self.previous_best[0]
-            self.previous_best.append(max_pred_index)
+            # get mean abs error, with mean taken across all dims EXCEPT first
+            # (first dimension is batches)
+            eligible_maes = [K.mean(K.abs(eligible_fake - real_photos), axis=[1,2,3], keepdims=True)
+                                for eligible_fake in eligible_fakes]
+            # flatten to just one extra dimension (representing the # fakes), and concat
+            eligible_maes = tf.concat([e[:,0,0,:] for e in eligible_maes], axis=1)
+            # take only the lowest MAE from each set of fakes
+            min_eligible_fake_error = tf.reduce_min(eligible_maes, axis=[1])
 
-            return tf.log(real_pred) + tf.log(1 - max_eligible_fake_pred)
+            return min_eligible_fake_error
+
+        def cGAN_prediction_loss(y_true, all_predictions, num_dropouts=2):
+            real_preds = all_predictions[:,4]
+            eligible_preds = tf.concat([all_predictions[:,i:i+1] for i in range(4)
+                                        if i != self.dropout_img_idx],
+                                        1)
+            max_eligible_fake_preds = tf.reduce_max(eligible_preds, axis=[1])
+            max_pred_index = tf.argmax(all_predictions[:,:4], axis=1)
+
+            return tf.log(real_preds) + tf.log(1 - max_eligible_fake_preds)
 
         # create discriminator models (one as a component in the cGAN, and one
         # to train separataly). They use the same base discriminator so that the
@@ -300,7 +320,7 @@ class sketch2pic():
             metrics=[tf.keras.metrics.binary_accuracy, tf.keras.metrics.binary_accuracy])
 
         # create cGAN out of a generator and a discriminator
-        self.generator = build_generator(num_output_channels=15, final_activation=self.gen_activation)
+        self.generator = build_generator(num_output_channels=18, final_activation=self.gen_activation)
         sketch_input = layers.Input(shape=(128,128,1))
         photo_input = layers.Input(shape=(128,128,3))
         # print(photo_input.output_shape)
@@ -309,21 +329,18 @@ class sketch2pic():
         fake_2 = layers.Lambda(lambda x:x[:,:,:,3:6])(fake_photos)
         fake_3 = layers.Lambda(lambda x:x[:,:,:,6:9])(fake_photos)
         fake_4 = layers.Lambda(lambda x:x[:,:,:,9:12])(fake_photos)
-        fake_5 = layers.Lambda(lambda x:x[:,:,:,12:])(fake_photos)
         concat_real = layers.Concatenate()([sketch_input, photo_input])
         concat_fake_1 = layers.Concatenate()([sketch_input, fake_1])
         concat_fake_2 = layers.Concatenate()([sketch_input, fake_2])
         concat_fake_3 = layers.Concatenate()([sketch_input, fake_3])
         concat_fake_4 = layers.Concatenate()([sketch_input, fake_4])
-        concat_fake_5 = layers.Concatenate()([sketch_input, fake_5])
         prediction_real = self.single_discriminator(concat_real)
         prediction_1 = self.single_discriminator(concat_fake_1)
         prediction_2 = self.single_discriminator(concat_fake_2)
         prediction_3 = self.single_discriminator(concat_fake_3)
         prediction_4 = self.single_discriminator(concat_fake_4)
-        prediction_5 = self.single_discriminator(concat_fake_5)
         all_predictions = layers.Concatenate()([prediction_1, prediction_2, prediction_3, \
-                                        prediction_4, prediction_5, prediction_real])
+                                prediction_4, prediction_real])
         all_predictions = layers.Flatten()(all_predictions)
         print(all_predictions.shape)
         self.cGAN = Model(
@@ -365,40 +382,59 @@ class sketch2pic():
         def perform_batch_train(batch):
             sketches = batch[1]
             true_photos = batch[0]
-            true_photos_fives = tf.concat([true_photos,true_photos,true_photos,true_photos,true_photos],
+            true_photos_quartets = tf.concat([true_photos for i in range(4)],
                                             axis=-1)
             weights_before_train = self.single_discriminator.get_weights()
             cGAN_metrics = self.cGAN.train_on_batch(
                 [sketches, true_photos],
-                [true_photos_fives, np.zeros((true_photos.shape[0], 6))])
+                [true_photos_quartets, np.zeros((true_photos.shape[0], 5))])
             # adjust discriminator weights to move two steps in the OPPOSITE direction
             # from the way they shifted with cGAN backprop (net move of one step)
             self.single_discriminator.set_weights(list(
                 2 * np.array(weights_before_train) - np.array(self.single_discriminator.get_weights())
                 ))
+            self.dropout_img_idx = np.random.randint(4)
 
         def get_batch_metrics(batch, return_fakes=False):
             true_photos = batch[0]
+            true_photos_quartets = tf.concat([true_photos for i in range(4)],
+                                            axis=-1)
             sketches = batch[1]
             fake_photosets = self.generator.predict_on_batch(sketches)
-            # get only the top photo from those photos
-            num_photos = fake_photosets.shape[0]
-            # tup 0 = which photoset, tup[1] = index of best photo in that set
-            fake_photos_best = tf.concat([ fake_photosets[tup[0],:,:,tup[1]:tup[1]+3]
-                                for tup in zip(self.previous_best[-num_photos:],
-                                                range(0,num_photos*3, 3)) ],
-                                                axis=0)
+
+            batch_size = fake_photosets.shape[0]
+            batch_indices = [i for i in range(batch_size)]
+
+            # RANDOMLY SELECT one image from each photoset (of six fakes) to run metrics:
+            photo_sample_indices = [np.random.randint(4)*3 for i in range(batch_size)]
+            fake_photo_samples = tf.concat([ fake_photosets[tup[0]:tup[0]+1,:,:,tup[1]:tup[1]+3]
+                                            for tup in zip([i for i in range(batch_size)], photo_sample_indices)],
+                                            axis=0)
+
             real_concats = np.concatenate([sketches, true_photos], axis=-1)
-            fake_concats = np.concatenate([sketches, fake_photos_best], axis=-1)
+            # print("sketches ", sketches.shape, type(sketches))
+            # print('samples ', fake_photo_samples.shape, type(fake_photo_samples))
+            fake_concats = tf.concat([sketches, fake_photo_samples], axis=-1)
             cGAN_metrics = self.cGAN.test_on_batch(
                 [sketches, true_photos],
-                [true_photos, np.zeros((num_photos, 5))])
+                [true_photos_quartets, np.zeros((batch_size, 5))])
             discriminator_metrics = self.dual_discriminator.test_on_batch(
                 [real_concats, fake_concats],
                 [np.ones((checkpoints_batch_size,1,1,1)), np.zeros((checkpoints_batch_size,1,1,1))]
             )
+
             if return_fakes:
-                return cGAN_metrics, discriminator_metrics, fake_photos_best
+                # concat all six fake photos generated from each batch and return as photo samples
+                def concat_photo_options(photoset, num_photos=4):
+                    photos = [photoset[:,:,i:i+3] for i in range(0,num_photos*3,3)]
+                    mosaic = np.concatenate(
+                    [np.concatenate([photos[i*2], photos[i*2+1]], axis=1) for i in range(num_photos//2)],
+                    axis=0)
+                    return resize(mosaic, (128*num_photos/4,128,3), mode='reflect', anti_aliasing=True)
+                fake_photos_mosaics = [concat_photo_options(fake_photosets[i]) for i in range(fake_photosets.shape[0])]
+
+                return cGAN_metrics, discriminator_metrics, fake_photos_mosaics
+
             return cGAN_metrics, discriminator_metrics
 
         def log_metrics(train_batch, dev_batch, checkpoint, return_fakes=True):
